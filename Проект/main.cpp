@@ -7,6 +7,7 @@
 #include <httplib.h>
 #include <nlohmann/json.hpp>
 #include <sqlite3.h>
+#include <thread>
 
 struct UserData {
     int64_t id;
@@ -282,8 +283,30 @@ bool AuthModule::GetUserRoles(const std::string& idType, const std::string& idVa
 
     return false;
 }
+std::string generateAuthLink(const std::string& chatId) {
+    // URL, по которому проходит аутентификация
+    std::string authUrl = "https://github.com/login/oauth/authorize";
+
+    // Ваш клиентский идентификатор GitHub
+    std::string clientId = "Ваш_Клиентский_ID";
+
+    // Перенаправление после успешной аутентификации
+    std::string redirectUri = "http://ваш_сервер/redirect_uri";
+
+    // Значения областей, к которым запрашивается доступ
+    std::string scope = "user";
+
+    // Составляем URL для аутентификации
+    std::string authLink = authUrl + "?client_id=" + clientId +
+        "&redirect_uri=" + redirectUri +
+        "&scope=" + scope +
+        "&state=" + chatId;  // Используем chatId как состояние
+
+    return authLink;
+}
+
 int main() {
-    go startServer;
+    std::thread startServer;
 
     std::string authURL = "https://github.com/login/oauth/authorize?client_id=" + CLIENT_ID;
     while (!authenticate.is_done) {
@@ -325,8 +348,25 @@ int main() {
 void startServer() {
     httplib::Server server;
     server.Post("/oauth", handleOauth);
+
+    server.Get("/authlink", [](const httplib::Request& req, httplib::Response& res) {   
+        // Получаем chat_id из параметров запроса, например, req.get_param_value("chat_id")
+        std::string chatId = req.get_param_value("chat_id");
+
+        // Генерируем ссылку для аутентификации
+        std::string authLink = generateAuthLink(chatId);
+
+        // Отправляем ссылку в модуль Бота (здесь нужно использовать ваш механизм взаимодействия)
+        // Например, отправка HTTP-запроса к модулю Бота
+        sendAuthLinkToBot(chatId, authLink);
+
+        // Отправляем ответ клиенту (ваша реализация может отличаться)
+        res.set_content("Auth link sent", "text/plain");
+        });
+
     server.listen("localhost", 8080);
 }
+
 
 void handleOauth(const httplib::Request& req, httplib::Response& res) {
     std::string responseHtml = "<html><body><h1>Вы НЕ аутентифицированы!</h1></body></html>";
